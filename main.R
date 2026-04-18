@@ -8,7 +8,6 @@ for (pkg in required_packages) {
   }
 }
 
-# HOLA STEVEN
 
 # Cargar los datos en una matriz (común para todos los puntos)
 matriz_datos <- matrix(c(73, 68, 74, 71, 67,
@@ -327,88 +326,9 @@ cat(sprintf("Lambda óptimo Box-Cox: %.4f\n", lambda_optimo))  # ← AGREGADO
 #----------------------------------------------------------------------
 # Punto 4: Método de Scheffé para contrastes
 # ----------------------------------------------------------------------
-cat("\n=== Punto 4: Método de Scheffé ===\n")
-
-scheffe_result <- scheffe.test(anova_model, "Agente", group = TRUE)
-
-print(scheffe_result)
-# ============================================================
-# Cálculo de los valores F del método de Scheffé (comparaciones pareadas)
-# ============================================================
-
-# --- Datos obtenidos del análisis ANOVA / Scheffé ---
-medias <- c(72.2, 68.8, 74.0, 72.0)  # Medias de los tratamientos (Agente 1 a 4)
-n <- 5                                # Número de repeticiones por agente
-MSerror <- 4.55                       # Error cuadrático medio del ANOVA
-df_error <- 12                        # Grados de libertad del error
-
-# --- Valor crítico F del ANOVA ---
-F_crit_anova <- 3.49                  # F de la tabla ANOVA (df1=3, df2=12)
-
-# --- Cálculo de los valores críticos de Scheffé ---
-# Fórmula: F_S = (k - 1) * F_α, (k-1), dfE
-k <- length(medias)
-
-# Valor crítico para α = 0.05
-Fcrit_05 <- (k - 1) * qf(1 - 0.05, df1 = k - 1, df2 = df_error)
-
-# Valor crítico para α = 0.01
-Fcrit_01 <- (k - 1) * qf(1 - 0.01, df1 = k - 1, df2 = df_error)
-
-cat("Valor crítico Scheffé α = 0.05 =", round(Fcrit_05, 2), "\n")
-cat("Valor crítico Scheffé α = 0.01 =", round(Fcrit_01, 2), "\n\n")
-
-# ============================================================
-#  Cálculo de los valores F calculados entre pares
-# ============================================================
-
-# Generar todas las combinaciones de pares (Agente i vs j)
-pares <- combn(1:k, 2)
-n_pares <- ncol(pares)
-
-# Crear tabla vacía
-tabla_F <- data.frame(
-  Contraste = character(n_pares),
-  F_calculado = numeric(n_pares),
-  stringsAsFactors = FALSE
-)
-
-# Calcular el F calculado para cada contraste
-for (m in 1:n_pares) {
-  i <- pares[1, m]
-  j <- pares[2, m]
-  Fcalc <- ((medias[i] - medias[j])^2) / (MSerror * (1/n + 1/n))
-  tabla_F[m, ] <- list(
-    paste0("Agente ", i, " - Agente ", j),
-    round(Fcalc, 2)
-  )
-}
-
-# ============================================================
-#  Interpretación según nivel de significancia
-# ============================================================
-
-tabla_F$Interpretacion_0.05 <- ifelse(tabla_F$F_calculado > Fcrit_05,
-                                      "Significativo", "No significativo")
-tabla_F$Interpretacion_0.01 <- ifelse(tabla_F$F_calculado > Fcrit_01,
-                                      "Muy significativo", "No significativo")
-
-# Interpretación final combinada
-tabla_F$Interpretacion_final <- ifelse(
-  tabla_F$F_calculado > Fcrit_01, "Diferencia muy significativa",
-  ifelse(tabla_F$F_calculado > Fcrit_05, "Diferencia significativa a α = 0.05", "Sin diferencia estadística")
-)
-
-# ============================================================
-#  Mostrar resultados finales
-# ============================================================
-cat("=== Tabla de resultados del método de Scheffé ===\n")
-print(tabla_F, row.names = FALSE)
-
-# ----------------------------------------------------------------------
-# Punto 5: Comparaciones entre pares de medias de tratamientos
-# Procedimientos: Tukey, LSD, Duncan y Newman-Keuls
-# ----------------------------------------------------------------------
+cat("\n=================================\n")
+cat("PUNTO 4: MÉTODO DE SCHEFFÉ\n")
+cat("=================================\n")
 
 library(agricolae)
 
@@ -419,109 +339,221 @@ long_df$Rollo  <- factor(long_df$Rollo)
 # Modelo DBCA
 anova_model <- aov(Resistencia ~ Agente + Rollo, data = long_df)
 
+# Resultado de agricolae
+scheffe_result <- scheffe.test(anova_model, "Agente", group = TRUE)
+print(scheffe_result)
+
+# ------------------------------------------------------------
+# 1. Extraer valores correctos desde el modelo
+# ------------------------------------------------------------
+medias <- with(long_df, tapply(Resistencia, Agente, mean))
+print(medias)
+
+anova_tab <- anova(anova_model)
+MSerror   <- anova_tab["Residuals", "Mean Sq"]
+df_error  <- anova_tab["Residuals", "Df"]
+
+k <- length(medias)                        # número de tratamientos
+n <- length(unique(long_df$Rollo))         # repeticiones por tratamiento = bloques
+
+cat("\nMSerror =", round(MSerror, 6), "\n")
+cat("gl del error =", df_error, "\n")
+cat("Número de tratamientos =", k, "\n")
+cat("Número de repeticiones por tratamiento =", n, "\n")
+
+# ------------------------------------------------------------
+# 2. Valores críticos de Scheffé
+# ------------------------------------------------------------
+Fcrit_05 <- (k - 1) * qf(1 - 0.05, df1 = k - 1, df2 = df_error)
+Fcrit_01 <- (k - 1) * qf(1 - 0.01, df1 = k - 1, df2 = df_error)
+
+cat("\nValor crítico de Scheffé con α = 0.05:", round(Fcrit_05, 4), "\n")
+cat("Valor crítico de Scheffé con α = 0.01:", round(Fcrit_01, 4), "\n")
+
+# ------------------------------------------------------------
+# 3. Comparaciones pareadas entre tratamientos
+#    (subconjunto de contrastes)
+# ------------------------------------------------------------
+pares <- combn(names(medias), 2)
+
+tabla_scheffe <- data.frame(
+  Contraste = character(),
+  Diferencia = numeric(),
+  F_calculado = numeric(),
+  Decision_0.05 = character(),
+  Decision_0.01 = character(),
+  stringsAsFactors = FALSE
+)
+
+for (m in 1:ncol(pares)) {
+  i <- pares[1, m]
+  j <- pares[2, m]
+  
+  diff_ij <- medias[i] - medias[j]
+  
+  # Para comparación entre dos medias en diseño balanceado:
+  # F = (yi - yj)^2 / [MSerror * (1/n + 1/n)]
+  Fcalc <- (diff_ij^2) / (MSerror * (1/n + 1/n))
+  
+  tabla_scheffe <- rbind(tabla_scheffe, data.frame(
+    Contraste = paste(i, "vs", j),
+    Diferencia = round(diff_ij, 4),
+    F_calculado = round(Fcalc, 4),
+    Decision_0.05 = ifelse(Fcalc > Fcrit_05, "Significativo", "No significativo"),
+    Decision_0.01 = ifelse(Fcalc > Fcrit_01, "Significativo", "No significativo")
+  ))
+}
+
+cat("\n=== Tabla de resultados de Scheffé ===\n")
+print(tabla_scheffe, row.names = FALSE)
+
+# ----------------------------------------------------------------------
+# Punto 5: Comparaciones entre pares de medias de tratamientos
+# Procedimientos: Tukey, LSD, Duncan y Newman-Keuls
+# con alpha = 0.05 y alpha = 0.01
+# ----------------------------------------------------------------------
+
+library(agricolae)
+
+long_df$Agente <- factor(long_df$Agente)
+long_df$Rollo  <- factor(long_df$Rollo)
+
+anova_model <- aov(Resistencia ~ Agente + Rollo, data = long_df)
+
 cat("\n============================================\n")
 cat("PUNTO 5: COMPARACIONES ENTRE PARES DE MEDIAS\n")
 cat("============================================\n")
 
-# Medias por tratamiento
 cat("\n--- Medias por tratamiento ---\n")
 medias_agente <- with(long_df, tapply(Resistencia, Agente, mean))
 print(medias_agente)
 
-# -------------------------------------------------
-# 1. Tukey
-# -------------------------------------------------
-cat("\n--- Prueba de Tukey ---\n")
-tukey_res <- HSD.test(anova_model, "Agente", group = TRUE)
-print(tukey_res)
-
-cat("\nComparaciones pareadas Tukey:\n")
-print(tukey_res$comparison)
-
-# -------------------------------------------------
-# 2. LSD (Fisher)
-# -------------------------------------------------
-cat("\n--- Prueba LSD ---\n")
-lsd_res <- LSD.test(anova_model, "Agente", group = TRUE, p.adj = "none")
-print(lsd_res)
-
-cat("\nComparaciones pareadas LSD:\n")
-print(lsd_res$comparison)
-
-# -------------------------------------------------
-# 3. Duncan
-# -------------------------------------------------
-cat("\n--- Prueba de Duncan ---\n")
-duncan_res <- duncan.test(anova_model, "Agente", group = TRUE)
-print(duncan_res)
-
-cat("\nComparaciones Duncan:\n")
-print(duncan_res$comparison)
-
-# -------------------------------------------------
-# 4. Newman-Keuls
-# -------------------------------------------------
-cat("\n--- Prueba Newman-Keuls ---\n")
-snk_res <- SNK.test(anova_model, "Agente", group = TRUE)
-print(snk_res)
-
-cat("\nComparaciones Newman-Keuls:\n")
-print(snk_res$comparison)
-
-# -------------------------------------------------
-# 5. Resumen conjunto de agrupaciones
-# -------------------------------------------------
-cat("\n--- Resumen de agrupaciones ---\n")
-cat("\nTukey:\n")
-print(tukey_res$groups)
-
-cat("\nLSD:\n")
-print(lsd_res$groups)
-
-cat("\nDuncan:\n")
-print(duncan_res$groups)
-
-cat("\nNewman-Keuls:\n")
-print(snk_res$groups)
+for (alpha in c(0.05, 0.01)) {
+  
+  cat("\n============================================\n")
+  cat(sprintf("RESULTADOS CON alpha = %.2f\n", alpha))
+  cat("============================================\n")
+  
+  cat("\n--- Tukey ---\n")
+  tukey_res <- HSD.test(anova_model, "Agente", alpha = alpha, group = TRUE)
+  print(tukey_res$groups)
+  
+  cat("\n--- LSD ---\n")
+  lsd_res <- LSD.test(anova_model, "Agente", alpha = alpha, group = TRUE, p.adj = "none")
+  print(lsd_res$groups)
+  
+  cat("\n--- Duncan ---\n")
+  duncan_res <- duncan.test(anova_model, "Agente", alpha = alpha, group = TRUE)
+  print(duncan_res$groups)
+  
+  cat("\n--- Newman-Keuls ---\n")
+  snk_res <- SNK.test(anova_model, "Agente", alpha = alpha, group = TRUE)
+  print(snk_res$groups)
+}
 # ----------------------------------------------------------------------
 # Punto 6: Análisis del efecto de los bloques
 # ----------------------------------------------------------------------
-cat("\n=== Punto 6: Análisis de Bloques ===\n")
+cat("\n====================================\n")
+cat("PUNTO 6: ANÁLISIS DEL EFECTO DE LOS BLOQUES\n")
+cat("====================================\n")
 
-print(anova_summary)
-cat("Bloques significativos a 0.05 (p=0.035), no a 0.01.\n")
-cat("Sin bloques, MSE aumenta, poder disminuye.\n")
+library(agricolae)
 
-# Modelo sin bloques (Pregunta 2 sin bloques)
-anova_model_sin_bloques <- aov(Resistencia ~ Agente, data = long_df)
-summary_sin_bloques <- summary(anova_model_sin_bloques)
-print(summary_sin_bloques)
-cat("ANOVA sin bloques: Agente no sig (p=0.0575).\n")
+# Asegurar factores
+long_df$Agente <- factor(long_df$Agente)
+long_df$Rollo  <- factor(long_df$Rollo)
 
-regression_model_sin_bloques <- lm(Resistencia ~ Agente, data = long_df)
-summary_regression_sin_bloques <- summary(regression_model_sin_bloques)
-print(summary_regression_sin_bloques)
-cat("Regresión sin bloques: Ningún coef sig a 0.05.\n")
+# ------------------------------------------------------------
+# 1. Modelo con bloques (DBCA)
+# ------------------------------------------------------------
+modelo_con_bloques <- aov(Resistencia ~ Agente + Rollo, data = long_df)
+anova_con_bloques <- summary(modelo_con_bloques)
+print(anova_con_bloques)
 
-# Pregunta 5 sin bloques
-cat("\nComparaciones sin bloques:\n")
+p_agente_cb <- anova_con_bloques[[1]]["Agente", "Pr(>F)"]
+p_rollo_cb  <- anova_con_bloques[[1]]["Rollo",  "Pr(>F)"]
+mse_cb      <- anova_con_bloques[[1]]["Residuals", "Mean Sq"]
 
-tukey_sin_bloques <- TukeyHSD(anova_model_sin_bloques, which = "Agente")
-print(tukey_sin_bloques)
+cat("\n--- Interpretación con bloques ---\n")
+for (alpha in c(0.05, 0.01)) {
+  cat(sprintf("\nCon α = %.2f\n", alpha))
+  cat(sprintf("Agente: %s\n",
+              ifelse(p_agente_cb < alpha, "Significativo", "No significativo")))
+  cat(sprintf("Rollo: %s\n",
+              ifelse(p_rollo_cb < alpha, "Significativo", "No significativo")))
+}
 
-lsd_sin_bloques <- LSD.test(anova_model_sin_bloques, "Agente", group=TRUE)
-print(lsd_sin_bloques$groups)
+cat(sprintf("\nMSE con bloques = %.4f\n", mse_cb))
 
-duncan_sin_bloques <- duncan.test(anova_model_sin_bloques, "Agente", group=TRUE)
-print(duncan_sin_bloques$groups)
+# ------------------------------------------------------------
+# 2. Modelo sin bloques
+# ------------------------------------------------------------
+modelo_sin_bloques <- aov(Resistencia ~ Agente, data = long_df)
+anova_sin_bloques <- summary(modelo_sin_bloques)
+print(anova_sin_bloques)
 
-snk_sin_bloques <- SNK.test(anova_model_sin_bloques, "Agente", group=TRUE)
-print(snk_sin_bloques$groups)
+p_agente_sb <- anova_sin_bloques[[1]]["Agente", "Pr(>F)"]
+mse_sb      <- anova_sin_bloques[[1]]["Residuals", "Mean Sq"]
 
-cat("Sin bloques: Menos diferencias detectadas (solo Ag2-Ag3 en la mayoría).\n")
-cat("El diseño con bloques fue clave para detectar efectos.\n")
+cat("\n--- Interpretación sin bloques ---\n")
+for (alpha in c(0.05, 0.01)) {
+  cat(sprintf("\nCon α = %.2f\n", alpha))
+  cat(sprintf("Agente: %s\n",
+              ifelse(p_agente_sb < alpha, "Significativo", "No significativo")))
+}
+cat(sprintf("\nMSE sin bloques = %.4f\n", mse_sb))
 
+# ------------------------------------------------------------
+# 3. Comparación del efecto de usar bloques
+# ------------------------------------------------------------
+cat("\n--- Comparación entre modelos ---\n")
+cat(sprintf("MSE con bloques    = %.4f\n", mse_cb))
+cat(sprintf("MSE sin bloques    = %.4f\n", mse_sb))
+cat(sprintf("Reducción del MSE  = %.4f\n", mse_sb - mse_cb))
+cat(sprintf("Razón MSE sin/con  = %.4f\n", mse_sb / mse_cb))
 
+if (mse_sb > mse_cb) {
+  cat("El uso de bloques redujo la variabilidad residual y mejoró la precisión del análisis.\n")
+} else {
+  cat("El uso de bloques no redujo la variabilidad residual.\n")
+}
 
+# ------------------------------------------------------------
+# 4. Modelo de regresión sin bloques
+# ------------------------------------------------------------
+reg_sin_bloques <- lm(Resistencia ~ Agente, data = long_df)
+summary_reg_sb <- summary(reg_sin_bloques)
+
+cat("\n--- Regresión sin bloques ---\n")
+print(summary_reg_sb)
+
+coef_tab_sb <- summary_reg_sb$coefficients
+
+cat("\nCoeficientes significativos al 5%:\n")
+print(coef_tab_sb[,4] < 0.05)
+
+cat("\nCoeficientes significativos al 1%:\n")
+print(coef_tab_sb[,4] < 0.01)
+
+# ------------------------------------------------------------
+# 5. Comparaciones múltiples sin bloques
+# ------------------------------------------------------------
+cat("\n--- Comparaciones múltiples sin bloques ---\n")
+
+cat("\nTukey:\n")
+tukey_sb <- HSD.test(modelo_sin_bloques, "Agente", group = TRUE)
+print(tukey_sb$groups)
+
+cat("\nLSD:\n")
+lsd_sb <- LSD.test(modelo_sin_bloques, "Agente", group = TRUE, p.adj = "none")
+print(lsd_sb$groups)
+
+cat("\nDuncan:\n")
+duncan_sb <- duncan.test(modelo_sin_bloques, "Agente", group = TRUE)
+print(duncan_sb$groups)
+
+cat("\nNewman-Keuls:\n")
+snk_sb <- SNK.test(modelo_sin_bloques, "Agente", group = TRUE)
+print(snk_sb$groups)
 
 
