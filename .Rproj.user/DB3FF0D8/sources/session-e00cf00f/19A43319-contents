@@ -296,9 +296,9 @@ boxcox(modelo_dbca, lambda = seq(-2, 2, by = 0.1))
   
   
   
-----------------------------------------------------------------------
-  # Punto 4: Método de Scheffé para contrastes
-  # ----------------------------------------------------------------------
+#----------------------------------------------------------------------
+# Punto 4: Método de Scheffé para contrastes
+# ----------------------------------------------------------------------
 cat("\n=== Punto 4: Método de Scheffé ===\n")
 
 scheffe_result <- scheffe.test(anova_model, "Agente", group = TRUE)

@@ -46,9 +46,7 @@ boxplot(Resistencia ~ Rollo, data = long_df,
 # ----------------------------------------------------------------------
 # Punto 2: Prueba de hipótesis (ANOVA y Modelo de Regresión)
 # ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-# Punto 2: Prueba de hipótesis (ANOVA y Modelo de Regresión)
-# ----------------------------------------------------------------------
+
 cat("\n=== Punto 2: ANOVA y Modelo de Regresión ===\n")
 
 # Convertir Agente y Rollo a factores (importante para que R los trate correctamente)
@@ -76,9 +74,6 @@ for (alpha in c(0.05, 0.01)) {
   cat(sprintf("Rollo:  %s\n", ifelse(p_rollo  < alpha, "SIGNIFICATIVO ✓", "No significativo ✗")))
 }
 
-# ----------------------------------------------------------------------
-# Punto 3: Validación del modelo de regresión
-# ----------------------------------------------------------------------
 # Modelo de Regresión lineal
 
 # Asegurar que las variables categóricas sean factores
@@ -113,55 +108,197 @@ print(p_values < 0.05)
 cat("\nSignificancia con alfa = 0.01:\n")
 print(p_values < 0.01)
 
-cat("\n=== Punto 3: Validación del Modelo ===\n")
+# ----------------------------------------------------------------------
+# Punto 3: Validación del modelo de regresión (DBCA)
+# ----------------------------------------------------------------------
 
-# --- Gráficos de validación individuales ---
-par(mfrow=c(1,1))  # Mostrar un gráfico a la vez
+# Paquetes necesarios
+required_packages <- c("car", "lmtest", "MASS")
+for (pkg in required_packages) {
+  if (!require(pkg, character.only = TRUE)) {
+    install.packages(pkg)
+    library(pkg, character.only = TRUE)
+  }
+}
 
-# 1️⃣ Residuos vs Valores ajustados
-plot(regression_model, which = 1)
+# Asegurar que las variables sean factores
+long_df$Agente <- factor(long_df$Agente)
+long_df$Rollo  <- factor(long_df$Rollo)
 
-# 2️⃣ QQ-plot de residuos
-plot(regression_model, which = 2)
+# Modelo del DBCA
+modelo_dbca <- lm(Resistencia ~ Agente + Rollo, data = long_df)
 
-# 3️⃣ Escala-Localización (homocedasticidad)
-plot(regression_model, which = 3)
+cat("\n====================================\n")
+cat("PUNTO 3: VALIDACIÓN DEL MODELO DBCA\n")
+cat("====================================\n")
 
-# 4️⃣ Distancia de Cook (influencia)
-plot(regression_model, which = 4)
+# ----------------------------------------------------------------------
+# 1. Resumen del modelo
+# ----------------------------------------------------------------------
+cat("\n--- Resumen del modelo ---\n")
+print(summary(modelo_dbca))
 
-# --- Pruebas estadísticas ---
-library(lmtest)
-library(car)
+cat("\n--- ANOVA del modelo ---\n")
+print(anova(modelo_dbca))
 
-shapiro_test <- shapiro.test(regression_model$residuals)
-print(shapiro_test)
-cat("Normalidad: p=0.425 >0.05, cumple.\n")
+# ----------------------------------------------------------------------
+# 2. Gráficos de diagnóstico
+# ----------------------------------------------------------------------
+par(mfrow = c(2, 2))
+plot(modelo_dbca)
+par(mfrow = c(1, 1))
 
-bptest_result <- bptest(regression_model)
-print(bptest_result)
-cat("Homoscedasticidad: p=0.114 >0.05, cumple.\n")
+# ----------------------------------------------------------------------
+# 3. Extracción de residuos y medidas de diagnóstico
+# ----------------------------------------------------------------------
+residuos      <- resid(modelo_dbca)
+ajustados     <- fitted(modelo_dbca)
+rstand        <- rstandard(modelo_dbca)
+rstud         <- rstudent(modelo_dbca)
+cook          <- cooks.distance(modelo_dbca)
+leverage      <- hatvalues(modelo_dbca)
 
-vif_result <- vif(regression_model)
-print(vif_result)
-cat("Multicolinealidad: VIF <2, OK.\n")
+# ----------------------------------------------------------------------
+# 4. Pruebas de supuestos
+# ----------------------------------------------------------------------
 
-coef_summary <- summary(regression_model)$coefficients
-print(coef_summary)
-cat("Parámetros significativos: Agente2 (p=0.027), Rollo5 marginal (p=0.070).\n")
+# 4.1 Normalidad
+cat("\n--- Prueba de normalidad (Shapiro-Wilk) ---\n")
+shapiro_res <- shapiro.test(residuos)
+print(shapiro_res)
 
-# --- Distancia de Cook (gráfico adicional personalizado) ---
-cooks_distance <- cooks.distance(regression_model)
-plot(cooks_distance, main="Distancia de Cook", ylab="Distancia", type="h")
-abline(h=1, col="red")
+if (shapiro_res$p.value > 0.05) {
+  cat("Conclusión: no se rechaza H0. Los residuos pueden considerarse normales.\n")
+} else {
+  cat("Conclusión: se rechaza H0. Hay evidencia de no normalidad en los residuos.\n")
+}
 
-influential_points <- which(cooks_distance > 1)
-print(influential_points)
-cat("Puntos influyentes: Ninguno (todos <1).\n")
+# 4.2 Homocedasticidad
+cat("\n--- Prueba de homocedasticidad (Breusch-Pagan) ---\n")
+bp_res <- bptest(modelo_dbca)
+print(bp_res)
 
-----------------------------------------------------------------------
-  # Punto 4: Método de Scheffé para contrastes
-  # ----------------------------------------------------------------------
+if (bp_res$p.value > 0.05) {
+  cat("Conclusión: no se rechaza H0. No hay evidencia de heterocedasticidad.\n")
+} else {
+  cat("Conclusión: se rechaza H0. Hay evidencia de heterocedasticidad.\n")
+}
+
+# Prueba adicional de Levene por tratamiento
+cat("\n--- Prueba de Levene por Agente ---\n")
+lev_agente <- leveneTest(Resistencia ~ Agente, data = long_df)
+print(lev_agente)
+
+# Prueba adicional de Levene por bloque
+cat("\n--- Prueba de Levene por Rollo ---\n")
+lev_rollo <- leveneTest(Resistencia ~ Rollo, data = long_df)
+print(lev_rollo)
+
+# ----------------------------------------------------------------------
+# 5. Significancia de parámetros
+# ----------------------------------------------------------------------
+cat("\n--- Coeficientes del modelo ---\n")
+coef_tabla <- summary(modelo_dbca)$coefficients
+print(coef_tabla)
+
+cat("\n--- Coeficientes significativos al 5% ---\n")
+print(coef_tabla[, 4] < 0.05)
+
+cat("\nNota: la significancia global de Agente y Rollo se concluye con el ANOVA.\n")
+cat("Los coeficientes del resumen del modelo comparan cada nivel con una categoría de referencia.\n")
+
+# ----------------------------------------------------------------------
+# 6. Detección de observaciones influyentes y atípicas
+# ----------------------------------------------------------------------
+
+cat("\n--- Residuos estandarizados ---\n")
+print(rstand)
+
+cat("\n--- Residuos studentizados ---\n")
+print(rstud)
+
+# Posibles outliers: |rstudent| > 2
+outliers <- which(abs(rstud) > 2)
+cat("\nObservaciones con |residuo studentizado| > 2:\n")
+print(outliers)
+
+cat("\n--- Distancia de Cook ---\n")
+print(cook)
+
+umbral_cook <- 4 / nrow(long_df)
+cat("\nUmbral de referencia para Cook = ", round(umbral_cook, 4), "\n", sep = "")
+influyentes <- which(cook > umbral_cook)
+cat("Observaciones potencialmente influyentes:\n")
+print(influyentes)
+
+cat("\n--- Leverage ---\n")
+print(leverage)
+
+umbral_lev <- 2 * length(coef(modelo_dbca)) / nrow(long_df)
+cat("\nUmbral de referencia para leverage = ", round(umbral_lev, 4), "\n", sep = "")
+lev_altos <- which(leverage > umbral_lev)
+cat("Observaciones con leverage alto:\n")
+print(lev_altos)
+
+cat("\n--- Prueba Bonferroni para outliers ---\n")
+print(outlierTest(modelo_dbca))
+
+# Tabla resumen de diagnóstico
+diagnostico <- data.frame(
+  Obs = 1:nrow(long_df),
+  Agente = long_df$Agente,
+  Rollo = long_df$Rollo,
+  Resistencia = long_df$Resistencia,
+  Ajustado = ajustados,
+  Residuo = residuos,
+  Rstand = rstand,
+  Rstudent = rstud,
+  Leverage = leverage,
+  CookD = cook
+)
+
+cat("\n--- Tabla de diagnóstico ---\n")
+print(diagnostico)
+
+# ----------------------------------------------------------------------
+# 7. Forma final del modelo
+# ----------------------------------------------------------------------
+cat("\n--- Forma final del modelo ---\n")
+
+if (shapiro_res$p.value > 0.05 &&
+    bp_res$p.value > 0.05 &&
+    length(outliers) == 0 &&
+    length(influyentes) == 0) {
+  
+  cat("Los supuestos del modelo son razonables.\n")
+  cat("Se conserva el modelo aditivo del DBCA:\n")
+  cat("Y_ij = mu + tau_i + beta_j + error_ij\n")
+  
+} else {
+  
+  cat("Se detectan posibles problemas en los supuestos o en observaciones influyentes.\n")
+  cat("Se recomienda revisar transformaciones o modelos alternativos.\n")
+}
+
+# ----------------------------------------------------------------------
+# 8. Posibles soluciones si no se cumplen los supuestos
+# ----------------------------------------------------------------------
+cat("\n--- Posibles soluciones si no se cumplen supuestos ---\n")
+cat("1. Si falla normalidad o varianza constante: considerar transformación Box-Cox.\n")
+cat("2. Probar transformaciones como log(Y), sqrt(Y) o 1/Y según el patrón observado.\n")
+cat("3. Si persisten problemas de varianza: considerar mínimos cuadrados ponderados.\n")
+cat("4. Si hay observaciones influyentes: revisar posibles errores de medición o digitación.\n")
+cat("5. Si la no normalidad es severa: considerar una alternativa no paramétrica, como Friedman.\n")
+
+# Gráfico Box-Cox
+cat("\n--- Gráfico Box-Cox ---\n")
+boxcox(modelo_dbca, lambda = seq(-2, 2, by = 0.1))  
+  
+  
+  
+#----------------------------------------------------------------------
+# Punto 4: Método de Scheffé para contrastes
+# ----------------------------------------------------------------------
 cat("\n=== Punto 4: Método de Scheffé ===\n")
 
 scheffe_result <- scheffe.test(anova_model, "Agente", group = TRUE)
