@@ -16,10 +16,18 @@ matriz_datos <- matrix(c(73, 68, 74, 71, 67,
 
 rownames(matriz_datos) <- paste("Agente", 1:4)
 colnames(matriz_datos) <- paste("Rollo", 1:5)
+
 # Convertir a data frame y reorganizar a formato largo
 df <- as.data.frame(matriz_datos)
-df$Rollo <- rownames(df)
-long_df <- melt(df, id.vars = "Rollo", variable.name = "Agente", value.name = "Resistencia")
+df$Agente <- rownames(df) 
+
+long_df <- melt(df, id.vars = "Agente", variable.name = "Rollo", value.name = "Resistencia")
+
+# Verificar que quedó bien
+print(long_df)
+tabla_matriz <- xtabs(Resistencia ~ Agente + Rollo, data = long_df)
+tabla_matriz
+
 
 # ----------------------------------------------------------------------
 # Punto 1: Exploración gráfica inicial de los datos (Diagramas de caja)
@@ -38,13 +46,45 @@ boxplot(Resistencia ~ Rollo, data = long_df,
 # ----------------------------------------------------------------------
 # Punto 2: Prueba de hipótesis (ANOVA y Modelo de Regresión)
 # ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# Punto 2: Prueba de hipótesis (ANOVA y Modelo de Regresión)
+# ----------------------------------------------------------------------
 cat("\n=== Punto 2: ANOVA y Modelo de Regresión ===\n")
 
-# ANOVA
+# Convertir Agente y Rollo a factores (importante para que R los trate correctamente)
+long_df$Agente <- as.factor(long_df$Agente)
+long_df$Rollo  <- as.factor(long_df$Rollo)
+
+# ANOVA del DBCA
 anova_model <- aov(Resistencia ~ Agente + Rollo, data = long_df)
 anova_summary <- summary(anova_model)
 print(anova_summary)
-cat("Interpretación ANOVA: Agente significativo a 0.05 (p=0.0163), no a 0.01. Bloques significativos a 0.05 (p=0.0353).\n")
+
+
+p_agente <- anova_summary[[1]]["Agente", "Pr(>F)"]
+p_rollo  <- anova_summary[[1]]["Rollo",  "Pr(>F)"]
+
+cat(sprintf("\nP-valor Agente: %.6f\n", p_agente))
+cat(sprintf("P-valor Rollo:  %.6f\n", p_rollo))
+
+# Conclusión automática según alpha
+for (alpha in c(0.05, 0.01)) {
+  cat(sprintf("\n--- Con α = %.2f ---\n", alpha))
+  cat(sprintf("Agente: %s\n", ifelse(p_agente < alpha, "SIGNIFICATIVO ✓", "No significativo ✗")))
+  cat(sprintf("Rollo:  %s\n", ifelse(p_rollo  < alpha, "SIGNIFICATIVO ✓", "No significativo ✗")))
+}
+
+# Modelo de Regresión lineal
+regression_model   <- lm(Resistencia ~ Agente + Rollo, data = long_df)
+regression_summary <- summary(regression_model)
+print(regression_summary)
+
+# Extraer R² automáticamente
+r2      <- regression_summary$r.squared
+r2_adj  <- regression_summary$adj.r.squared
+cat(sprintf("\nR²          = %.4f\n", r2))
+cat(sprintf("R² ajustado = %.4f\n", r2_adj))
+
 
 # Modelo de Regresión
 regression_model <- lm(Resistencia ~ Agente + Rollo, data = long_df)

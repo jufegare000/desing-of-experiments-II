@@ -16,10 +16,18 @@ matriz_datos <- matrix(c(73, 68, 74, 71, 67,
 
 rownames(matriz_datos) <- paste("Agente", 1:4)
 colnames(matriz_datos) <- paste("Rollo", 1:5)
+
 # Convertir a data frame y reorganizar a formato largo
 df <- as.data.frame(matriz_datos)
-df$Rollo <- rownames(df)
-long_df <- melt(df, id.vars = "Rollo", variable.name = "Agente", value.name = "Resistencia")
+df$Agente <- rownames(df) 
+
+long_df <- melt(df, id.vars = "Agente", variable.name = "Rollo", value.name = "Resistencia")
+
+# Verificar que quedó bien
+print(long_df)
+tabla_matriz <- xtabs(Resistencia ~ Agente + Rollo, data = long_df)
+tabla_matriz
+
 
 # ----------------------------------------------------------------------
 # Punto 1: Exploración gráfica inicial de los datos (Diagramas de caja)
@@ -44,7 +52,7 @@ cat("\n=== Punto 2: ANOVA y Modelo de Regresión ===\n")
 anova_model <- aov(Resistencia ~ Agente + Rollo, data = long_df)
 anova_summary <- summary(anova_model)
 print(anova_summary)
-cat("Interpretación ANOVA: Agente significativo a 0.05 (p=0.0163), no a 0.01. Bloques significativos a 0.05 (p=0.0353).\n")
+cat("Para Agente, el valor p es 0.121. Como 0.121 > 0.05, no hay evidencia estadísticamente significativa para afirmar que los promedios de resistencia difieren entre agentes químicos.\n")
 
 # Modelo de Regresión
 regression_model <- lm(Resistencia ~ Agente + Rollo, data = long_df)
