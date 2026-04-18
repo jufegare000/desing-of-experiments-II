@@ -7,6 +7,9 @@ for (pkg in required_packages) {
     library(pkg, character.only = TRUE)
   }
 }
+
+# HOLA STEVEN
+
 # Cargar los datos en una matriz (común para todos los puntos)
 matriz_datos <- matrix(c(73, 68, 74, 71, 67,
                          73, 67, 75, 72, 70,
