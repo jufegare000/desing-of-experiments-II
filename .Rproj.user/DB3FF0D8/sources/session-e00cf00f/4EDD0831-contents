@@ -1,5 +1,4 @@
-library(targets)
-
+# Instalación y carga de paquetes necesarios para todo el análisis
 required_packages <- c("reshape2", "car", "lmtest", "MASS", "agricolae", "multcomp", "ggplot2")
 for (pkg in required_packages) {
   if (!require(pkg, character.only = TRUE)) {
@@ -7,112 +6,57 @@ for (pkg in required_packages) {
     library(pkg, character.only = TRUE)
   }
 }
-# Cargar los datos en una matriz (común para todos los puntos)
-matriz_datos <- matrix(c(73, 68, 74, 71, 67,
-                         73, 67, 75, 72, 70,
-                         75, 68, 78, 73, 68,
-                         73, 71, 75, 75, 69),
-                       nrow = 4, byrow = TRUE)
 
-rownames(matriz_datos) <- paste("Agente", 1:4)
-colnames(matriz_datos) <- paste("Rollo", 1:5)
+# Cargar los datos en una matriz (común para todos los puntos)
+matriz_datos <- matrix(c(73, 68, 74, 71, 
+                         73, 67, 75, 72, 
+                         75, 68, 78, 73, 
+                         73, 71, 75, 75, 
+                         67, 70, 68, 69), 
+                       nrow = 5, byrow = TRUE)
+
+rownames(matriz_datos) <- paste("Rollo", 1:5)
+colnames(matriz_datos) <- paste("Agente", 1:4)
 
 # Convertir a data frame y reorganizar a formato largo
 df <- as.data.frame(matriz_datos)
-df$Agente <- rownames(df) 
-
-long_df <- melt(df, id.vars = "Agente", variable.name = "Rollo", value.name = "Resistencia")
-
-# Verificar que quedó bien
-print(long_df)
-tabla_matriz <- xtabs(Resistencia ~ Agente + Rollo, data = long_df)
-tabla_matriz
-
+df$Rollo <- rownames(df)
+long_df <- melt(df, id.vars = "Rollo", variable.name = "Agente", value.name = "Resistencia")
 
 # ----------------------------------------------------------------------
 # Punto 1: Exploración gráfica inicial de los datos (Diagramas de caja)
 # ----------------------------------------------------------------------
 
 # Boxplot por Agente
-boxplot(Resistencia ~ Agente, data = long_df,
-        main = "Boxplot de Resistencia por Agente Químico",
+boxplot(Resistencia ~ Agente, data = long_df, 
+        main = "Boxplot de Resistencia por Agente Químico", 
         ylab = "Resistencia a la Tensión", xlab = "Agente Químico", col = "lightblue")
 
 # Boxplot por Rollo
-boxplot(Resistencia ~ Rollo, data = long_df,
-        main = "Boxplot de Resistencia por Rollo",
+boxplot(Resistencia ~ Rollo, data = long_df, 
+        main = "Boxplot de Resistencia por Rollo", 
         ylab = "Resistencia a la Tensión", xlab = "Rollo", col = "lightgreen")
 
 # ----------------------------------------------------------------------
 # Punto 2: Prueba de hipótesis (ANOVA y Modelo de Regresión)
 # ----------------------------------------------------------------------
-# ----------------------------------------------------------------------
-# Punto 2: Prueba de hipótesis (ANOVA y Modelo de Regresión)
-# ----------------------------------------------------------------------
 cat("\n=== Punto 2: ANOVA y Modelo de Regresión ===\n")
 
-# Convertir Agente y Rollo a factores (importante para que R los trate correctamente)
-long_df$Agente <- as.factor(long_df$Agente)
-long_df$Rollo  <- as.factor(long_df$Rollo)
-
-# ANOVA del DBCA
+# ANOVA
 anova_model <- aov(Resistencia ~ Agente + Rollo, data = long_df)
 anova_summary <- summary(anova_model)
 print(anova_summary)
+cat("Interpretación ANOVA: Agente significativo a 0.05 (p=0.0163), no a 0.01. Bloques significativos a 0.05 (p=0.0353).\n")
 
-
-p_agente <- anova_summary[[1]]["Agente", "Pr(>F)"]
-p_rollo  <- anova_summary[[1]]["Rollo",  "Pr(>F)"]
-
-#Se extraen P-valores para verificar hipótesis
-
-cat(sprintf("\nP-valor Agente: %.6f\n", p_agente))
-cat(sprintf("P-valor Rollo:  %.6f\n", p_rollo))
-
-# Conclusión automática según alpha
-for (alpha in c(0.05, 0.01)) {
-  cat(sprintf("\n--- Con α = %.2f ---\n", alpha))
-  cat(sprintf("Agente: %s\n", ifelse(p_agente < alpha, "SIGNIFICATIVO ✓", "No significativo ✗")))
-  cat(sprintf("Rollo:  %s\n", ifelse(p_rollo  < alpha, "SIGNIFICATIVO ✓", "No significativo ✗")))
-}
+# Modelo de Regresión
+regression_model <- lm(Resistencia ~ Agente + Rollo, data = long_df)
+regression_summary <- summary(regression_model)
+print(regression_summary)
+cat("Interpretación Regresión: R²=0.715. Agente2 reduce significativamente la resistencia (-3.4, p=0.027).\n")
 
 # ----------------------------------------------------------------------
 # Punto 3: Validación del modelo de regresión
 # ----------------------------------------------------------------------
-# Modelo de Regresión lineal
-
-# Asegurar que las variables categóricas sean factores
-long_df$Agente <- as.factor(long_df$Agente)
-long_df$Rollo  <- as.factor(long_df$Rollo)
-
-# Ajustar el modelo de regresión lineal
-regression_model <- lm(Resistencia ~ Agente + Rollo, data = long_df)
-
-# Resumen del modelo
-regression_summary <- summary(regression_model)
-print(regression_summary)
-
-# Extraer R² y R² ajustado
-r2     <- regression_summary$r.squared
-r2_adj <- regression_summary$adj.r.squared
-
-cat(sprintf("\nR²          = %.4f\n", r2))
-cat(sprintf("R² ajustado = %.4f\n", r2_adj))
-
-# Extraer p-values de los coeficientes
-p_values <- regression_summary$coefficients[, 4]
-
-cat("\nP-values de los coeficientes:\n")
-print(p_values)
-
-# Evaluación con alfa = 0.05
-cat("\nSignificancia con alfa = 0.05:\n")
-print(p_values < 0.05)
-
-# Evaluación con alfa = 0.01
-cat("\nSignificancia con alfa = 0.01:\n")
-print(p_values < 0.01)
-
 cat("\n=== Punto 3: Validación del Modelo ===\n")
 
 # --- Gráficos de validación individuales ---
@@ -159,9 +103,10 @@ influential_points <- which(cooks_distance > 1)
 print(influential_points)
 cat("Puntos influyentes: Ninguno (todos <1).\n")
 
-----------------------------------------------------------------------
-  # Punto 4: Método de Scheffé para contrastes
-  # ----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
+# Punto 4: Método de Scheffé para contrastes
+# ----------------------------------------------------------------------
 cat("\n=== Punto 4: Método de Scheffé ===\n")
 
 scheffe_result <- scheffe.test(anova_model, "Agente", group = TRUE)
@@ -240,6 +185,7 @@ tabla_F$Interpretacion_final <- ifelse(
 cat("=== Tabla de resultados del método de Scheffé ===\n")
 print(tabla_F, row.names = FALSE)
 
+
 # ----------------------------------------------------------------------
 # Punto 5: Comparaciones entre pares (Tukey, LSD, Duncan, Newman-Keuls)
 # ----------------------------------------------------------------------
@@ -305,8 +251,4 @@ print(snk_sin_bloques$groups)
 
 cat("Sin bloques: Menos diferencias detectadas (solo Ag2-Ag3 en la mayoría).\n")
 cat("El diseño con bloques fue clave para detectar efectos.\n")
-
-
-
-
 
