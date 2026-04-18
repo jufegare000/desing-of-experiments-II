@@ -112,7 +112,6 @@ print(p_values < 0.01)
 # Punto 3: Validación del modelo de regresión (DBCA)
 # ----------------------------------------------------------------------
 
-# Paquetes necesarios
 required_packages <- c("car", "lmtest", "MASS")
 for (pkg in required_packages) {
   if (!require(pkg, character.only = TRUE)) {
@@ -121,11 +120,9 @@ for (pkg in required_packages) {
   }
 }
 
-# Asegurar que las variables sean factores
 long_df$Agente <- factor(long_df$Agente)
 long_df$Rollo  <- factor(long_df$Rollo)
 
-# Modelo del DBCA
 modelo_dbca <- lm(Resistencia ~ Agente + Rollo, data = long_df)
 
 cat("\n====================================\n")
@@ -142,57 +139,74 @@ cat("\n--- ANOVA del modelo ---\n")
 print(anova(modelo_dbca))
 
 # ----------------------------------------------------------------------
-# 2. Gráficos de diagnóstico
+# 2. Gráficos de diagnóstico (los 4 clásicos de R)
 # ----------------------------------------------------------------------
 par(mfrow = c(2, 2))
-plot(modelo_dbca)
+plot(modelo_dbca, main = "Diagnóstico del modelo DBCA")
 par(mfrow = c(1, 1))
 
 # ----------------------------------------------------------------------
 # 3. Extracción de residuos y medidas de diagnóstico
 # ----------------------------------------------------------------------
-residuos      <- resid(modelo_dbca)
-ajustados     <- fitted(modelo_dbca)
-rstand        <- rstandard(modelo_dbca)
-rstud         <- rstudent(modelo_dbca)
-cook          <- cooks.distance(modelo_dbca)
-leverage      <- hatvalues(modelo_dbca)
+residuos  <- resid(modelo_dbca)
+ajustados <- fitted(modelo_dbca)
+rstand    <- rstandard(modelo_dbca)
+rstud     <- rstudent(modelo_dbca)
+cook      <- cooks.distance(modelo_dbca)
+leverage  <- hatvalues(modelo_dbca)
 
 # ----------------------------------------------------------------------
 # 4. Pruebas de supuestos
 # ----------------------------------------------------------------------
 
-# 4.1 Normalidad
+# 4.1 Normalidad — Shapiro-Wilk
 cat("\n--- Prueba de normalidad (Shapiro-Wilk) ---\n")
 shapiro_res <- shapiro.test(residuos)
 print(shapiro_res)
 
-if (shapiro_res$p.value > 0.05) {
-  cat("Conclusión: no se rechaza H0. Los residuos pueden considerarse normales.\n")
-} else {
-  cat("Conclusión: se rechaza H0. Hay evidencia de no normalidad en los residuos.\n")
+for (alpha in c(0.05, 0.01)) {
+  cat(sprintf("\nCon α = %.2f: %s\n", alpha,
+              ifelse(shapiro_res$p.value > alpha,
+                     "No se rechaza H0 → Residuos normales ✓",
+                     "Se rechaza H0 → Evidencia de no normalidad ✗")))
 }
 
-# 4.2 Homocedasticidad
+# QQ-plot manual para visualizar normalidad
+qqnorm(residuos, main = "QQ-Plot de Residuos")
+qqline(residuos, col = "red", lwd = 2)
+
+# 4.2 Homocedasticidad — Breusch-Pagan
 cat("\n--- Prueba de homocedasticidad (Breusch-Pagan) ---\n")
 bp_res <- bptest(modelo_dbca)
 print(bp_res)
 
-if (bp_res$p.value > 0.05) {
-  cat("Conclusión: no se rechaza H0. No hay evidencia de heterocedasticidad.\n")
-} else {
-  cat("Conclusión: se rechaza H0. Hay evidencia de heterocedasticidad.\n")
+for (alpha in c(0.05, 0.01)) {
+  cat(sprintf("\nCon α = %.2f: %s\n", alpha,
+              ifelse(bp_res$p.value > alpha,
+                     "No se rechaza H0 → Varianza constante ✓",
+                     "Se rechaza H0 → Heterocedasticidad ✗")))
 }
 
-# Prueba adicional de Levene por tratamiento
+# 4.3 Levene por Agente y por Rollo
 cat("\n--- Prueba de Levene por Agente ---\n")
 lev_agente <- leveneTest(Resistencia ~ Agente, data = long_df)
 print(lev_agente)
 
-# Prueba adicional de Levene por bloque
 cat("\n--- Prueba de Levene por Rollo ---\n")
 lev_rollo <- leveneTest(Resistencia ~ Rollo, data = long_df)
 print(lev_rollo)
+
+# 4.4 Independencia — Durbin-Watson  ← AGREGADO: faltaba en tu código
+cat("\n--- Prueba de independencia (Durbin-Watson) ---\n")
+dw_res <- dwtest(modelo_dbca)
+print(dw_res)
+
+for (alpha in c(0.05, 0.01)) {
+  cat(sprintf("\nCon α = %.2f: %s\n", alpha,
+              ifelse(dw_res$p.value > alpha,
+                     "No se rechaza H0 → Residuos independientes ✓",
+                     "Se rechaza H0 → Evidencia de autocorrelación ✗")))
+}
 
 # ----------------------------------------------------------------------
 # 5. Significancia de parámetros
@@ -202,59 +216,65 @@ coef_tabla <- summary(modelo_dbca)$coefficients
 print(coef_tabla)
 
 cat("\n--- Coeficientes significativos al 5% ---\n")
-print(coef_tabla[, 4] < 0.05)
+sig_05 <- coef_tabla[coef_tabla[, 4] < 0.05, ]
+print(sig_05)
 
-cat("\nNota: la significancia global de Agente y Rollo se concluye con el ANOVA.\n")
-cat("Los coeficientes del resumen del modelo comparan cada nivel con una categoría de referencia.\n")
+cat("\n--- Coeficientes significativos al 1% ---\n")  # ← AGREGADO
+sig_01 <- coef_tabla[coef_tabla[, 4] < 0.01, ]
+print(sig_01)
 
 # ----------------------------------------------------------------------
 # 6. Detección de observaciones influyentes y atípicas
 # ----------------------------------------------------------------------
-
 cat("\n--- Residuos estandarizados ---\n")
-print(rstand)
+print(round(rstand, 4))
 
 cat("\n--- Residuos studentizados ---\n")
-print(rstud)
+print(round(rstud, 4))
 
-# Posibles outliers: |rstudent| > 2
 outliers <- which(abs(rstud) > 2)
 cat("\nObservaciones con |residuo studentizado| > 2:\n")
-print(outliers)
+if (length(outliers) == 0) cat("Ninguna\n") else print(outliers)
 
 cat("\n--- Distancia de Cook ---\n")
-print(cook)
+print(round(cook, 4))
 
 umbral_cook <- 4 / nrow(long_df)
-cat("\nUmbral de referencia para Cook = ", round(umbral_cook, 4), "\n", sep = "")
+cat(sprintf("\nUmbral Cook = %.4f\n", umbral_cook))
 influyentes <- which(cook > umbral_cook)
 cat("Observaciones potencialmente influyentes:\n")
-print(influyentes)
+if (length(influyentes) == 0) cat("Ninguna\n") else print(influyentes)
 
 cat("\n--- Leverage ---\n")
-print(leverage)
+print(round(leverage, 4))
 
 umbral_lev <- 2 * length(coef(modelo_dbca)) / nrow(long_df)
-cat("\nUmbral de referencia para leverage = ", round(umbral_lev, 4), "\n", sep = "")
+cat(sprintf("\nUmbral leverage = %.4f\n", umbral_lev))
 lev_altos <- which(leverage > umbral_lev)
 cat("Observaciones con leverage alto:\n")
-print(lev_altos)
+if (length(lev_altos) == 0) cat("Ninguna\n") else print(lev_altos)
 
 cat("\n--- Prueba Bonferroni para outliers ---\n")
 print(outlierTest(modelo_dbca))
 
+# Gráfico de Cook's Distance  ← AGREGADO: útil para visualizar influyentes
+plot(cook, type = "h", main = "Distancia de Cook",
+     ylab = "Cook's Distance", xlab = "Observación")
+abline(h = umbral_cook, col = "red", lty = 2)
+text(influyentes, cook[influyentes], labels = influyentes, pos = 3, col = "red")
+
 # Tabla resumen de diagnóstico
 diagnostico <- data.frame(
-  Obs = 1:nrow(long_df),
-  Agente = long_df$Agente,
-  Rollo = long_df$Rollo,
+  Obs         = 1:nrow(long_df),
+  Agente      = long_df$Agente,
+  Rollo       = long_df$Rollo,
   Resistencia = long_df$Resistencia,
-  Ajustado = ajustados,
-  Residuo = residuos,
-  Rstand = rstand,
-  Rstudent = rstud,
-  Leverage = leverage,
-  CookD = cook
+  Ajustado    = round(ajustados, 4),
+  Residuo     = round(residuos, 4),
+  Rstand      = round(rstand, 4),
+  Rstudent    = round(rstud, 4),
+  Leverage    = round(leverage, 4),
+  CookD       = round(cook, 4)
 )
 
 cat("\n--- Tabla de diagnóstico ---\n")
@@ -267,34 +287,39 @@ cat("\n--- Forma final del modelo ---\n")
 
 if (shapiro_res$p.value > 0.05 &&
     bp_res$p.value > 0.05 &&
+    dw_res$p.value > 0.05 &&
     length(outliers) == 0 &&
     length(influyentes) == 0) {
   
-  cat("Los supuestos del modelo son razonables.\n")
-  cat("Se conserva el modelo aditivo del DBCA:\n")
-  cat("Y_ij = mu + tau_i + beta_j + error_ij\n")
+  cat("Todos los supuestos se cumplen. Se conserva el modelo aditivo del DBCA:\n")
+  cat("Y_ij = mu + tau_i + beta_j + error_ij\n\n")
+  cat("Donde:\n")
+  cat("  mu     = media general\n")
+  cat("  tau_i  = efecto del agente químico i (i = 1,2,3,4)\n")
+  cat("  beta_j = efecto del rollo j (j = 1,2,3,4,5)\n")
+  cat("  error  ~ N(0, sigma²)\n")
   
 } else {
-  
-  cat("Se detectan posibles problemas en los supuestos o en observaciones influyentes.\n")
-  cat("Se recomienda revisar transformaciones o modelos alternativos.\n")
+  cat("Se detectan posibles problemas. Ver sección de soluciones.\n")
 }
 
 # ----------------------------------------------------------------------
 # 8. Posibles soluciones si no se cumplen los supuestos
 # ----------------------------------------------------------------------
 cat("\n--- Posibles soluciones si no se cumplen supuestos ---\n")
-cat("1. Si falla normalidad o varianza constante: considerar transformación Box-Cox.\n")
-cat("2. Probar transformaciones como log(Y), sqrt(Y) o 1/Y según el patrón observado.\n")
-cat("3. Si persisten problemas de varianza: considerar mínimos cuadrados ponderados.\n")
-cat("4. Si hay observaciones influyentes: revisar posibles errores de medición o digitación.\n")
-cat("5. Si la no normalidad es severa: considerar una alternativa no paramétrica, como Friedman.\n")
+cat("1. Normalidad/varianza: transformación Box-Cox.\n")
+cat("2. Transformaciones: log(Y), sqrt(Y) o 1/Y.\n")
+cat("3. Heterocedasticidad persistente: mínimos cuadrados ponderados (WLS).\n")
+cat("4. Observaciones influyentes: revisar errores de medición.\n")
+cat("5. No normalidad severa: prueba no paramétrica de Friedman.\n")
 
-# Gráfico Box-Cox
+# ----------------------------------------------------------------------
+# 9. Gráfico Box-Cox
+# ----------------------------------------------------------------------
 cat("\n--- Gráfico Box-Cox ---\n")
-boxcox(modelo_dbca, lambda = seq(-2, 2, by = 0.1))  
-  
-  
+bc <- boxcox(modelo_dbca, lambda = seq(-2, 2, by = 0.1))
+lambda_optimo <- bc$x[which.max(bc$y)]
+cat(sprintf("Lambda óptimo Box-Cox: %.4f\n", lambda_optimo))  # ← AGREGADO
   
 #----------------------------------------------------------------------
 # Punto 4: Método de Scheffé para contrastes
@@ -378,33 +403,83 @@ cat("=== Tabla de resultados del método de Scheffé ===\n")
 print(tabla_F, row.names = FALSE)
 
 # ----------------------------------------------------------------------
-# Punto 5: Comparaciones entre pares (Tukey, LSD, Duncan, Newman-Keuls)
+# Punto 5: Comparaciones entre pares de medias de tratamientos
+# Procedimientos: Tukey, LSD, Duncan y Newman-Keuls
 # ----------------------------------------------------------------------
-cat("\n=== Punto 5: Comparaciones entre pares ===\n")
 
-# Tukey
-tukey_summary <- TukeyHSD(anova_model, which = "Agente")
-print(tukey_summary)
-cat("Tukey: Solo Ag2-Ag3 significativo a 0.05.\n")
+library(agricolae)
 
-# LSD
-lsd_result <- LSD.test(anova_model, "Agente", group=TRUE)
-print(lsd_result$groups)
-cat("LSD: Ag2 diff de Ag1, Ag3, Ag4.\n")
+# Asegurar factores
+long_df$Agente <- factor(long_df$Agente)
+long_df$Rollo  <- factor(long_df$Rollo)
 
-# Duncan
-duncan_result <- duncan.test(anova_model, "Agente", group=TRUE)
-print(duncan_result$groups)
-cat("Duncan: Similar a LSD.\n")
+# Modelo DBCA
+anova_model <- aov(Resistencia ~ Agente + Rollo, data = long_df)
 
-# Newman-Keuls (SNK)
-snk_result <- SNK.test(anova_model, "Agente", group=TRUE)
-print(snk_result$groups)
-cat("SNK: Solo Ag2-Ag3.\n")
+cat("\n============================================\n")
+cat("PUNTO 5: COMPARACIONES ENTRE PARES DE MEDIAS\n")
+cat("============================================\n")
 
-cat("Conclusiones diferentes: Sí. LSD/Duncan más liberales (más diffs), Tukey/SNK más conservadores.\n")
-cat("Dado supuestos cumplen, preferir Tukey para control FWER.\n")
+# Medias por tratamiento
+cat("\n--- Medias por tratamiento ---\n")
+medias_agente <- with(long_df, tapply(Resistencia, Agente, mean))
+print(medias_agente)
 
+# -------------------------------------------------
+# 1. Tukey
+# -------------------------------------------------
+cat("\n--- Prueba de Tukey ---\n")
+tukey_res <- HSD.test(anova_model, "Agente", group = TRUE)
+print(tukey_res)
+
+cat("\nComparaciones pareadas Tukey:\n")
+print(tukey_res$comparison)
+
+# -------------------------------------------------
+# 2. LSD (Fisher)
+# -------------------------------------------------
+cat("\n--- Prueba LSD ---\n")
+lsd_res <- LSD.test(anova_model, "Agente", group = TRUE, p.adj = "none")
+print(lsd_res)
+
+cat("\nComparaciones pareadas LSD:\n")
+print(lsd_res$comparison)
+
+# -------------------------------------------------
+# 3. Duncan
+# -------------------------------------------------
+cat("\n--- Prueba de Duncan ---\n")
+duncan_res <- duncan.test(anova_model, "Agente", group = TRUE)
+print(duncan_res)
+
+cat("\nComparaciones Duncan:\n")
+print(duncan_res$comparison)
+
+# -------------------------------------------------
+# 4. Newman-Keuls
+# -------------------------------------------------
+cat("\n--- Prueba Newman-Keuls ---\n")
+snk_res <- SNK.test(anova_model, "Agente", group = TRUE)
+print(snk_res)
+
+cat("\nComparaciones Newman-Keuls:\n")
+print(snk_res$comparison)
+
+# -------------------------------------------------
+# 5. Resumen conjunto de agrupaciones
+# -------------------------------------------------
+cat("\n--- Resumen de agrupaciones ---\n")
+cat("\nTukey:\n")
+print(tukey_res$groups)
+
+cat("\nLSD:\n")
+print(lsd_res$groups)
+
+cat("\nDuncan:\n")
+print(duncan_res$groups)
+
+cat("\nNewman-Keuls:\n")
+print(snk_res$groups)
 # ----------------------------------------------------------------------
 # Punto 6: Análisis del efecto de los bloques
 # ----------------------------------------------------------------------
