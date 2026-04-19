@@ -331,7 +331,7 @@ cat("PUNTO 4: MÉTODO DE SCHEFFÉ\n")
 cat("=================================\n")
 
 library(agricolae)
-
+   
 # Asegurar factores
 long_df$Agente <- factor(long_df$Agente)
 long_df$Rollo  <- factor(long_df$Rollo)
@@ -413,8 +413,6 @@ print(tabla_scheffe, row.names = FALSE)
 # con alpha = 0.05 y alpha = 0.01
 # ----------------------------------------------------------------------
 
-library(agricolae)
-
 long_df$Agente <- factor(long_df$Agente)
 long_df$Rollo  <- factor(long_df$Rollo)
 
@@ -456,8 +454,6 @@ for (alpha in c(0.05, 0.01)) {
 cat("\n====================================\n")
 cat("PUNTO 6: ANÁLISIS DEL EFECTO DE LOS BLOQUES\n")
 cat("====================================\n")
-
-library(agricolae)
 
 # Asegurar factores
 long_df$Agente <- factor(long_df$Agente)
